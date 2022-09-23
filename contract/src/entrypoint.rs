@@ -1,7 +1,7 @@
 #![cfg(not(feature = "no-entrypoint"))]
 use crate::processor::Processor;
 use solana_program::{
-    account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey,
+    account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey,msg
 };
 
 entrypoint!(process_instruction);
@@ -15,6 +15,7 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
+    msg!("2");
     Processor::process(program_id, accounts, _instruction_data)?;
 
     Ok(())

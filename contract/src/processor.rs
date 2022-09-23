@@ -252,6 +252,10 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData);
         }
 
+        if *game_state_account.owner == *program_id {
+            return Err(ProgramError::AccountAlreadyInitialized);
+        }
+
         let mint_prefix = "mints";
 
         let mint_state_seed = &[mint_prefix.as_bytes(), (game_state_account.key).as_ref()];
@@ -355,6 +359,7 @@ impl Processor {
         let platform_seed = &[pda_prefix.as_bytes()];
 
         let (platform_pda, _nonce) = Pubkey::find_program_address(platform_seed, program_id);
+      
 
         if *platform_state_account.key != platform_pda {
             return Err(ProgramError::InvalidAccountData);
@@ -370,12 +375,15 @@ impl Processor {
         let (collection_pda, _nonce) =
             Pubkey::find_program_address(collection_seed_seed, program_id);
 
+      
         if *collection_state.key != collection_pda {
             return Err(ProgramError::InvalidAccountData);
         }
 
         let mut collection_data =
             CollectionData::unpack_unchecked(&collection_state.try_borrow_data()?)?;
+
+     
 
         let mut game_data = Gamestruct::unpack_unchecked(&game_state_account.try_borrow_data()?)?;
 
@@ -410,6 +418,21 @@ impl Processor {
                 token_program.clone(),
             ],
         )?;
+
+         //Ristrict same user ....
+         if *user_account.key == game_data.player1_pubkey {
+            return Err(ProgramError::InvalidAccountData);
+        } else if *user_account.key == game_data.player2_pubkey{
+            return Err(ProgramError::InvalidAccountData);
+        } else if *user_account.key == game_data.player3_pubkey{
+            return Err(ProgramError::InvalidAccountData);
+        } else if *user_account.key == game_data.player4_pubkey{
+            return Err(ProgramError::InvalidAccountData);
+        } else if *user_account.key == game_data.player5_pubkey{
+            return Err(ProgramError::InvalidAccountData);
+        } else if *user_account.key == game_data.player6_pubkey{
+            return  Err(ProgramError::InvalidAccountData);
+        } 
 
         if game_data.counter < 6 {
             let vacant_place = get_vacant_place(game_data).ok_or(BettingError::GameFull)?;
@@ -454,7 +477,9 @@ impl Processor {
                 _ => todo!(),
             }
         }
+       
 
+      
         // todo Add random number logic here
         if game_data.counter == 6 {
             let client_seed = game_data.client_seed.to_string();
@@ -496,10 +521,13 @@ impl Processor {
             }
 
             game_data.status = 2;
+            game_data.previous_game_nonce=collection_data.nonce;
             collection_data.nonce += 1;
         }
 
         Gamestruct::pack(game_data, &mut game_state_account.try_borrow_mut_data()?)?;
+        CollectionData::pack(collection_data, &mut collection_state.try_borrow_mut_data()?)?;
+
         PlatformData::pack(
             platform_data,
             &mut platform_state_account.try_borrow_mut_data()?,
@@ -526,6 +554,9 @@ impl Processor {
 
         let collection_state = next_account_info(account_info_iter)?;
 
+        let collection_mint = next_account_info(account_info_iter)?;
+
+
         let game_token_account = next_account_info(account_info_iter)?;
 
         let treasury_account = next_account_info(account_info_iter)?;
@@ -547,7 +578,20 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData);
         }
 
-        let game_pda_seeds_prefix = "0";
+        let collection_prefix = "collection";
+
+        let collection_seed_seed = &[collection_prefix.as_bytes(), (collection_mint.key).as_ref()];
+
+        let (collection_pda, _nonce) =
+            Pubkey::find_program_address(collection_seed_seed, program_id);
+
+        if *collection_state.key != collection_pda {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        let collection_data =
+            CollectionData::unpack_unchecked(&collection_state.try_borrow_data()?)?;
+
+        let game_pda_seeds_prefix = collection_data.nonce.to_string();
 
         let game_pda_seeds = &[
             game_pda_seeds_prefix.as_bytes(),
@@ -688,6 +732,8 @@ impl Processor {
         let token_program = next_account_info(account_info_iter)?;
 
         let platform_state_account = next_account_info(account_info_iter)?;
+        let system_program = next_account_info(account_info_iter)?;
+
 
         let pda_prefix = "betting_contract";
 
@@ -720,7 +766,10 @@ impl Processor {
         let collection_data =
             CollectionData::unpack_unchecked(&collection_state_account.try_borrow_data()?)?;
 
-        let game_prefix = collection_data.nonce.to_string();
+        let game_data = Gamestruct::unpack_unchecked(&game_state_account.try_borrow_data()?)?;
+
+
+        let game_prefix = game_data.previous_game_nonce.to_string();
 
         let game_seed = &[
             game_prefix.as_bytes(),
@@ -733,28 +782,25 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData);
         }
 
-        let game_data = Gamestruct::unpack_unchecked(&game_state_account.try_borrow_data()?)?;
 
         //* tarnsfer 3% of flore prise to admin */
         //* Transfer sol from user  account to admin()
-        let tranfer_instructions = spl_token::instruction::transfer(
-            token_program.key,
-            user_account.key,
-            treasury_account.key,
-            user_account.key,
-            &[],
-            flore_prise * platform_data.platform_fees / 100,
-        )?;
+      
+    
+        let transfer_sol_to_treasury_ix =
+        system_instruction::transfer(user_account.key, treasury_account.key, flore_prise * platform_data.platform_fees / 100);
 
         invoke(
-            &tranfer_instructions,
+            &transfer_sol_to_treasury_ix,
             &[
                 user_account.clone(),
                 treasury_account.clone(),
                 user_account.clone(),
-                token_program.clone(),
+                system_program.clone(),
             ],
         )?;
+      
+       
 
         if game_data.winner_pubkey == *user_account.key {
             //* Transfer NFT from owner token account to PDA(contract)
@@ -777,19 +823,21 @@ impl Processor {
                 ],
                 &[&[
                     game_prefix.as_bytes(),
-                    (game_state_account.key).as_ref(),
+                    (collection_state_account.key).as_ref(),
                     &[game_nonce],
                 ]],
             )?;
         } else {
             return Err(BettingError::InvalidWinner.into());
         }
+      
 
         Gamestruct::pack(game_data, &mut game_state_account.try_borrow_mut_data()?)?;
         CollectionData::pack(
             collection_data,
             &mut collection_state_account.try_borrow_mut_data()?,
         )?;
+     
 
         Ok(())
     }

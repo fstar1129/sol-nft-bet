@@ -28,6 +28,8 @@ pub struct Gamestruct {
     // pub hash:[u8 ;64],
     pub random_no: u64,
     pub nonce: u64,
+    pub previous_game_nonce: u64,
+
 }
 impl Sealed for Gamestruct {}
 impl IsInitialized for Gamestruct {
@@ -36,8 +38,7 @@ impl IsInitialized for Gamestruct {
     }
 }
 impl Pack for Gamestruct {
-    // const LEN: usize = 385;
-    const LEN: usize = 327;
+    const LEN: usize = 335;
     fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
         let src = array_ref![src, 0, Gamestruct::LEN];
         let (
@@ -62,8 +63,9 @@ impl Pack for Gamestruct {
             // hash,
             random_no,
             nonce,
+            previous_game_nonce
         ) = array_refs![
-            src, 1, 32, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 32, 8, 8, /*64,*/ 8, 8
+            src, 1, 32, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 32, 8, 8, /*64,*/ 8, 8,8
         ];
         let is_initialized = match is_initialized {
             [0] => false,
@@ -135,6 +137,8 @@ impl Pack for Gamestruct {
             random_no: u64::from_le_bytes(*random_no),
 
             nonce: u64::from_le_bytes(*nonce),
+            previous_game_nonce: u64::from_le_bytes(*previous_game_nonce),
+
         })
     }
     fn pack_into_slice(&self, dst: &mut [u8]) {
@@ -161,8 +165,9 @@ impl Pack for Gamestruct {
             // hash_dst,
             random_no_dst,
             nonce_dst,
+            previous_game_nonce_dst
         ) = mut_array_refs![
-            dst, 1, 32, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 32, 8, 8, /*64,*/ 8, 8
+            dst, 1, 32, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 1, 32, 32, 8, 8, /*64,*/ 8, 8,8
         ];
         let Gamestruct {
             is_initialized,
@@ -186,6 +191,7 @@ impl Pack for Gamestruct {
             // hash,
             random_no,
             nonce,
+            previous_game_nonce
         } = self;
         is_initialized_dst[0] = *is_initialized as u8;
 
@@ -224,6 +230,7 @@ impl Pack for Gamestruct {
 
         *random_no_dst = random_no.to_le_bytes();
         *nonce_dst = nonce.to_le_bytes();
+        *previous_game_nonce_dst=previous_game_nonce.to_le_bytes();
     }
 }
 
